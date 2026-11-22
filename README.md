@@ -21,6 +21,15 @@ are gone. Hoshobako is the opposite:
   run a server to remind you.
 - **Receipt photos** are copied into your own data folder, never uploaded.
 
+## Built to outlive its maker
+
+Hoshobako has no server to shut down, no account to lock, and no company
+that has to survive for your records to survive. If this project
+disappeared tomorrow, the binary on your disk keeps working, your ledger
+stays readable as plain JSON, and the source is MIT-licensed so anyone can
+rebuild or fork it. Software you keep should not depend on a service
+someone else can switch off.
+
 ## Quick start
 
 Download the binary for your platform from the

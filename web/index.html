@@ -71,7 +71,7 @@
   <div id="list"></div>
   <div class="empty" id="empty" hidden data-i18n="empty">Nothing tracked yet. Add your first warranty or expiry date.</div>
 </main>
-<footer data-i18n="footer">Your data never leaves this computer. Hoshobako stores everything in one JSON file in your own data folder, and exports are yours to keep.</footer>
+<footer data-i18n="footer">Your data never leaves this computer. Hoshobako stores everything in one JSON file in your own data folder, and exports are yours to keep. There is no server to shut down — if this project disappeared tomorrow, the app and your records keep working.</footer>
 
 <dialog id="dlg">
   <form id="form" method="dialog">
@@ -98,7 +98,7 @@
 const I18N = {
   en: { tagline:"Warranty & expiry ledger — local only, no account, no cloud.", add:"Add item", ics:"Calendar (.ics)",
     backup:"Backup (.json)", restore:"Restore", search_ph:"Search name, store, model…", empty:"Nothing tracked yet. Add your first warranty or expiry date.",
-    footer:"Your data never leaves this computer. Hoshobako stores everything in one JSON file in your own data folder, and exports are yours to keep.",
+    footer:"Your data never leaves this computer. Hoshobako stores everything in one JSON file in your own data folder, and exports are yours to keep. There is no server to shut down — if this project disappeared tomorrow, the app and your records keep working.",
     name:"Name", category:"Category", store:"Store / issuer", model:"Model / serial", price:"Price", purchased:"Purchase date",
     months:"Warranty length (months)", expires:"Expiry date (overrides the two fields above)", photo:"Receipt photo", notes:"Notes",
     cancel:"Cancel", save:"Save", edit:"Edit", del:"Delete", addTitle:"Add item", editTitle:"Edit item",
@@ -109,7 +109,7 @@ const I18N = {
     cats:{warranty:"Warranty", document:"Document", food:"Food / medicine", contract:"Contract", other:"Other"} },
   ja: { tagline:"保証と期限の台帳 — 端末内だけ、アカウントなし、クラウドなし。", add:"追加", ics:"カレンダー (.ics)",
     backup:"バックアップ (.json)", restore:"復元", search_ph:"名前・店・型番で検索…", empty:"まだ何も登録されていません。最初の保証や期限を追加しましょう。",
-    footer:"データはこのコンピュータの外に出ません。すべてあなたのデータフォルダの JSON ファイル1つに保存され、書き出しはいつでも自由です。",
+    footer:"データはこのコンピュータの外に出ません。すべてあなたのデータフォルダの JSON ファイル1つに保存され、書き出しはいつでも自由です。サーバーがないのでサービス終了で消えることはなく、開発が止まってもアプリと記録はそのまま使えます。",
     name:"名前", category:"分類", store:"購入店 / 発行元", model:"型番 / シリアル", price:"価格", purchased:"購入日",
     months:"保証期間（か月）", expires:"期限日（上の2項目より優先）", photo:"レシート・保証書の写真", notes:"メモ",
     cancel:"キャンセル", save:"保存", edit:"編集", del:"削除", addTitle:"項目を追加", editTitle:"項目を編集",
