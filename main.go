@@ -53,12 +53,30 @@ func main() {
 		case "export":
 			exit(cliExport(os.Args[2:]))
 			return
+		case "import":
+			exit(cliImport(os.Args[2:]))
+			return
 		case "version", "-version", "--version":
 			fmt.Println("hoshobako", version)
 			return
+		default:
+			fmt.Fprintf(os.Stderr, "hoshobako: unknown command %q\n", os.Args[1])
+			printUsage()
+			os.Exit(1)
 		}
 	}
 	exit(serve())
+}
+
+func printUsage() {
+	fmt.Fprintln(os.Stderr, "usage: hoshobako [serve|add|list|due|export|import|version]")
+	fmt.Fprintln(os.Stderr, "  serve            start the web UI (default when no command is given)")
+	fmt.Fprintln(os.Stderr, "  add ...          add an item (see: hoshobako add -h)")
+	fmt.Fprintln(os.Stderr, "  list             list all items")
+	fmt.Fprintln(os.Stderr, "  due              list items expired or expiring soon")
+	fmt.Fprintln(os.Stderr, "  export json|csv|ics [file]   write the ledger out")
+	fmt.Fprintln(os.Stderr, "  import <file.json>           restore the ledger from a JSON export")
+	fmt.Fprintln(os.Stderr, "  version          print the version")
 }
 
 func exit(err error) {
@@ -441,4 +459,51 @@ func cliExport(args []string) error {
 	}
 	_, err = os.Stdout.Write(raw)
 	return err
+}
+
+// cliImport restores the ledger from a JSON export (the counterpart of
+// "export json"). It validates the whole file before touching the
+// current ledger, and when the current ledger is not empty it first
+// writes a timestamped backup of it into the data directory, so an
+// import never silently destroys existing records.
+func cliImport(args []string) error {
+	if len(args) < 1 {
+		return errors.New("usage: hoshobako import <file.json>")
+	}
+	raw, err := os.ReadFile(args[0])
+	if err != nil {
+		return err
+	}
+	items, err := ledger.ImportJSON(raw)
+	if err != nil {
+		return fmt.Errorf("invalid backup file: %w", err)
+	}
+	st, err := ledger.OpenStore()
+	if err != nil {
+		return err
+	}
+	current, err := st.Load()
+	if err != nil {
+		return err
+	}
+	backupPath := ""
+	if len(current) > 0 {
+		backup, err := ledger.ExportJSON(current)
+		if err != nil {
+			return err
+		}
+		backupPath = filepath.Join(st.Dir(), "backup-before-import-"+time.Now().Format("20060102-150405")+".json")
+		if err := os.WriteFile(backupPath, backup, 0o644); err != nil {
+			return fmt.Errorf("could not back up the current ledger, import aborted: %w", err)
+		}
+	}
+	if err := st.Save(items); err != nil {
+		return err
+	}
+	if backupPath != "" {
+		fmt.Printf("imported %d items (previous %d items backed up to %s)\n", len(items), len(current), backupPath)
+	} else {
+		fmt.Printf("imported %d items\n", len(items))
+	}
+	return nil
 }
