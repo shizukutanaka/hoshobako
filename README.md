@@ -56,6 +56,7 @@ hoshobako list          # everything, soonest expiry first
 hoshobako due           # expired, or expiring within 30 days
 hoshobako export ics reminders.ics
 hoshobako export json backup.json
+hoshobako import backup.json   # restore (a non-empty ledger is backed up first)
 hoshobako version
 ```
 
