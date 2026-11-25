@@ -54,6 +54,8 @@ The same binary works as a CLI:
 hoshobako add -name "Air conditioner" -purchased 2025-04-01 -months 60 -store "Denkiya"
 hoshobako list          # everything, soonest expiry first
 hoshobako due           # expired, or expiring within 30 days
+hoshobako export ledger.csv   # CSV is the default export format
+hoshobako export              # CSV to stdout
 hoshobako export ics reminders.ics
 hoshobako export json backup.json
 hoshobako import backup.json   # restore (a non-empty ledger is backed up first)
