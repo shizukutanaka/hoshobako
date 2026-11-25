@@ -1,7 +1,10 @@
 package ledger
 
 import (
+	"bytes"
+	"encoding/csv"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -144,6 +147,36 @@ func TestCSVAndICS(t *testing.T) {
 		if !strings.Contains(ics, want) {
 			t.Errorf("ICS missing %q", want)
 		}
+	}
+}
+
+func TestCSVRoundTripEscaping(t *testing.T) {
+	items := []Item{
+		{ID: "b1", Name: "Blender", Category: CategoryWarranty, Store: "Denkiya", Model: "BL-500", Price: "¥12,800", Purchased: "2025-03-10", Months: 24, Notes: "kitchen"},
+		{ID: "m1", Name: "Milk, fresh", Category: CategoryFood, Store: "Corner \"Mart\"", Expires: "2026-11-25", Notes: "use soon"},
+		{ID: "p1", Name: "Passport", Category: CategoryDocument, Store: "City Hall", Expires: "2030-06-30", Notes: "renew early"},
+	}
+	raw, err := ExportCSV(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"\"Milk, fresh\"", "\"Corner \"\"Mart\"\"\"", "\"¥12,800\""} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("CSV missing escaped field %s in %q", want, raw)
+		}
+	}
+	records, err := csv.NewReader(bytes.NewReader(raw)).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{
+		{"name", "category", "store", "model", "price", "purchased", "warranty_months", "expires", "notes"},
+		{"Milk, fresh", "food", "Corner \"Mart\"", "", "", "", "", "2026-11-25", "use soon"},
+		{"Blender", "warranty", "Denkiya", "BL-500", "¥12,800", "2025-03-10", "24", "2027-03-10", "kitchen"},
+		{"Passport", "document", "City Hall", "", "", "", "", "2030-06-30", "renew early"},
+	}
+	if !reflect.DeepEqual(records, want) {
+		t.Fatalf("CSV round trip mismatch:\ngot  %#v\nwant %#v", records, want)
 	}
 }
 

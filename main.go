@@ -74,7 +74,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  add ...          add an item (see: hoshobako add -h)")
 	fmt.Fprintln(os.Stderr, "  list             list all items")
 	fmt.Fprintln(os.Stderr, "  due              list items expired or expiring soon")
-	fmt.Fprintln(os.Stderr, "  export json|csv|ics [file]   write the ledger out")
+	fmt.Fprintln(os.Stderr, "  export [file]                write CSV to stdout, or to a file")
+	fmt.Fprintln(os.Stderr, "  export json|csv|ics [file]   write the ledger in a specific format")
 	fmt.Fprintln(os.Stderr, "  import <file.json>           restore the ledger from a JSON export")
 	fmt.Fprintln(os.Stderr, "  version          print the version")
 }
@@ -429,8 +430,21 @@ func cliDue() error {
 }
 
 func cliExport(args []string) error {
-	if len(args) < 1 {
-		return errors.New("usage: hoshobako export json|csv|ics [file]")
+	format := "csv"
+	file := ""
+	if len(args) > 0 {
+		switch args[0] {
+		case "json", "csv", "ics":
+			format = args[0]
+			if len(args) > 1 {
+				file = args[1]
+			}
+		default:
+			if len(args) > 1 {
+				return fmt.Errorf("unknown format: %s", args[0])
+			}
+			file = args[0]
+		}
 	}
 	st, err := ledger.OpenStore()
 	if err != nil {
@@ -441,21 +455,19 @@ func cliExport(args []string) error {
 		return err
 	}
 	var raw []byte
-	switch args[0] {
+	switch format {
 	case "json":
 		raw, err = ledger.ExportJSON(items)
 	case "csv":
 		raw, err = ledger.ExportCSV(items)
 	case "ics":
 		raw = ledger.ExportICS(items, time.Now())
-	default:
-		return fmt.Errorf("unknown format: %s", args[0])
 	}
 	if err != nil {
 		return err
 	}
-	if len(args) > 1 {
-		return os.WriteFile(args[1], raw, 0o644)
+	if file != "" {
+		return os.WriteFile(file, raw, 0o644)
 	}
 	_, err = os.Stdout.Write(raw)
 	return err
