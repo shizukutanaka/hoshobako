@@ -15,6 +15,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -298,7 +299,44 @@ func (s *server) routes() http.Handler {
 		}
 		writeJSON(w, 200, map[string]int{"imported": len(items)})
 	})
-	return mux
+	return localhostGuard(mux)
+}
+
+// localhostGuard restricts the server to genuine localhost traffic.
+// Binding 127.0.0.1 alone is not enough: any web page open in the
+// user's browser can POST to 127.0.0.1 endpoints, and DNS rebinding
+// can read responses. The guard rejects requests whose Host is not a
+// loopback hostname, and for state-changing methods requires that a
+// present Origin header matches the request Host exactly.
+func localhostGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if h, _, err := net.SplitHostPort(r.Host); err == nil {
+			host = h
+		}
+		switch strings.ToLower(host) {
+		case "127.0.0.1", "::1", "localhost":
+		default:
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			origins, present := r.Header["Origin"]
+			if present {
+				if len(origins) != 1 {
+					http.Error(w, "forbidden", http.StatusForbidden)
+					return
+				}
+				u, err := url.Parse(origins[0])
+				if err != nil || u.Host != r.Host {
+					http.Error(w, "forbidden", http.StatusForbidden)
+					return
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func isOurServer(port int) bool {
