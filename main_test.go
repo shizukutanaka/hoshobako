@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"hoshobako/internal/ledger"
 )
@@ -120,6 +122,143 @@ func doReq(t *testing.T, h http.Handler, method, path, host, origin, body string
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
+}
+
+func importBody(t *testing.T, items []ledger.Item) string {
+	t.Helper()
+	raw, err := ledger.ExportJSON(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+func TestWebImportBacksUpExistingLedger(t *testing.T) {
+	dataDir := t.TempDir()
+	st := &ledger.Store{Path: filepath.Join(dataDir, "hoshobako.json")}
+	oldItems := []ledger.Item{
+		{ID: "old1", Name: "Old blender", Category: ledger.CategoryWarranty, Purchased: "2025-01-10", Months: 24},
+	}
+	if err := st.Save(oldItems); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(st.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	newItems := []ledger.Item{
+		{ID: "new1", Name: "New passport", Category: ledger.CategoryDocument, Expires: "2030-01-01"},
+	}
+	h := (&server{store: st}).routes()
+	rec := doReq(t, h, "POST", "/api/import", "127.0.0.1:8771", "", importBody(t, newItems))
+	if rec.Code != 200 {
+		t.Fatalf("got %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Imported int    `json:"imported"`
+		Backup   string `json:"backup"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Imported != len(newItems) {
+		t.Fatalf("imported = %d, want %d", resp.Imported, len(newItems))
+	}
+	if !strings.HasPrefix(resp.Backup, "backup-before-import-") || !strings.HasSuffix(resp.Backup, ".json") {
+		t.Fatalf("backup name = %q", resp.Backup)
+	}
+	backupRaw, err := os.ReadFile(filepath.Join(dataDir, resp.Backup))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(backupRaw, before) {
+		t.Fatalf("backup does not match previous ledger:\nbackup:\n%s\nprevious:\n%s", backupRaw, before)
+	}
+	got, err := st.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(newItems) || got[0].ID != newItems[0].ID {
+		t.Fatalf("ledger after import = %+v, want %+v", got, newItems)
+	}
+}
+
+func TestWebImportIntoEmptyLedgerHasNoBackup(t *testing.T) {
+	dataDir := t.TempDir()
+	st := &ledger.Store{Path: filepath.Join(dataDir, "hoshobako.json")}
+	items := []ledger.Item{
+		{ID: "new1", Name: "New passport", Category: ledger.CategoryDocument, Expires: "2030-01-01"},
+	}
+	h := (&server{store: st}).routes()
+	rec := doReq(t, h, "POST", "/api/import", "127.0.0.1:8771", "", importBody(t, items))
+	if rec.Code != 200 {
+		t.Fatalf("got %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Imported int    `json:"imported"`
+		Backup   string `json:"backup"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Imported != len(items) {
+		t.Fatalf("imported = %d, want %d", resp.Imported, len(items))
+	}
+	if resp.Backup != "" {
+		t.Fatalf("backup = %q, want empty", resp.Backup)
+	}
+	if strings.Contains(rec.Body.String(), `"backup"`) {
+		t.Fatalf("empty-ledger response included a backup key: %s", rec.Body.String())
+	}
+	entries, err := os.ReadDir(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "backup-before-import-") {
+			t.Fatalf("unexpected backup created: %s", entry.Name())
+		}
+	}
+}
+
+func TestWebImportBackupFailureLeavesLedgerUnchanged(t *testing.T) {
+	dataDir := t.TempDir()
+	st := &ledger.Store{Path: filepath.Join(dataDir, "hoshobako.json")}
+	oldItems := []ledger.Item{
+		{ID: "old1", Name: "Old blender", Category: ledger.CategoryWarranty, Purchased: "2025-01-10", Months: 24},
+	}
+	if err := st.Save(oldItems); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(st.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now()
+	for i := 0; i < 10; i++ {
+		name := "backup-before-import-" + now.Add(time.Duration(i)*time.Second).Format("20060102-150405") + ".json"
+		if err := os.Mkdir(filepath.Join(dataDir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	newItems := []ledger.Item{
+		{ID: "new1", Name: "New passport", Category: ledger.CategoryDocument, Expires: "2030-01-01"},
+	}
+	h := (&server{store: st}).routes()
+	rec := doReq(t, h, "POST", "/api/import", "127.0.0.1:8771", "", importBody(t, newItems))
+	if rec.Code != 500 {
+		t.Fatalf("got %d, want 500", rec.Code)
+	}
+	after, err := os.ReadFile(st.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatalf("ledger changed after aborted import:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
 }
 
 func TestGuardAllowsLocalhostGet(t *testing.T) {

@@ -88,6 +88,25 @@ func exit(err error) {
 	}
 }
 
+func backupBeforeImport(st *ledger.Store) (string, int, error) {
+	current, err := st.Load()
+	if err != nil {
+		return "", 0, err
+	}
+	if len(current) == 0 {
+		return "", 0, nil
+	}
+	backup, err := ledger.ExportJSON(current)
+	if err != nil {
+		return "", 0, err
+	}
+	name := "backup-before-import-" + time.Now().Format("20060102-150405") + ".json"
+	if err := os.WriteFile(filepath.Join(st.Dir(), name), backup, 0o644); err != nil {
+		return "", 0, fmt.Errorf("could not back up the current ledger, import aborted: %w", err)
+	}
+	return name, len(current), nil
+}
+
 // ---------- server ----------
 
 type server struct {
@@ -294,11 +313,19 @@ func (s *server) routes() http.Handler {
 			writeErr(w, 400, err)
 			return
 		}
+		backupName, _, err := backupBeforeImport(s.store)
+		if err != nil {
+			writeErr(w, 500, err)
+			return
+		}
 		if err := s.store.Save(items); err != nil {
 			writeErr(w, 500, err)
 			return
 		}
-		writeJSON(w, 200, map[string]int{"imported": len(items)})
+		writeJSON(w, 200, struct {
+			Imported int    `json:"imported"`
+			Backup   string `json:"backup,omitempty"`
+		}{Imported: len(items), Backup: backupName})
 	})
 	return localhostGuard(mux)
 }
@@ -532,26 +559,16 @@ func cliImport(args []string) error {
 	if err != nil {
 		return err
 	}
-	current, err := st.Load()
+	backupName, previousCount, err := backupBeforeImport(st)
 	if err != nil {
 		return err
-	}
-	backupPath := ""
-	if len(current) > 0 {
-		backup, err := ledger.ExportJSON(current)
-		if err != nil {
-			return err
-		}
-		backupPath = filepath.Join(st.Dir(), "backup-before-import-"+time.Now().Format("20060102-150405")+".json")
-		if err := os.WriteFile(backupPath, backup, 0o644); err != nil {
-			return fmt.Errorf("could not back up the current ledger, import aborted: %w", err)
-		}
 	}
 	if err := st.Save(items); err != nil {
 		return err
 	}
-	if backupPath != "" {
-		fmt.Printf("imported %d items (previous %d items backed up to %s)\n", len(items), len(current), backupPath)
+	if backupName != "" {
+		backupPath := filepath.Join(st.Dir(), backupName)
+		fmt.Printf("imported %d items (previous %d items backed up to %s)\n", len(items), previousCount, backupPath)
 	} else {
 		fmt.Printf("imported %d items\n", len(items))
 	}
